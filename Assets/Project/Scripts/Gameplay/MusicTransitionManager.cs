@@ -30,7 +30,10 @@ namespace Oculus.Interaction.ComprehensiveSample
 
         private void Play(string id)
         {
-            MasterMusic.Instance.Play(id);
+            if (MasterMusic.Instance != null)
+            {
+                MasterMusic.Instance.Play(id);
+            }
         }
     }
 }

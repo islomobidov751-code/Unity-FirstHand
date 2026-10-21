@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>First Hand Live: choose your camera</title>
+<style>
+  :root{--bg:#0b1620;--panel:#122433;--panel2:#183247;--line:#1d3a50;--text:#eaf3f8;--muted:#9db6c7;--accent:#3fb6d9;--live:#e5384a;--ok:#34c38f;--warn:#f5b942;color-scheme:dark}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  header{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line)}
+  h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.2px}
+  .status{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:14px;color:var(--muted)}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--warn)}
+  .dot.ok{background:var(--ok)} .dot.bad{background:var(--live)}
+  main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;padding:16px 20px;max-width:1600px;margin:0 auto}
+  @media (max-width:980px){main{grid-template-columns:1fr}}
+  .stage{position:relative;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:16/9}
+  .stage img{width:100%;height:100%;object-fit:contain;display:block}
+  .badges{position:absolute;top:12px;left:12px;display:flex;gap:8px;flex-wrap:wrap}
+  .pill{background:rgba(11,22,32,.85);padding:5px 11px;border-radius:999px;font-size:13px;font-weight:600}
+  .pill.live{background:var(--live)}
+  .overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.7);padding:24px;color:var(--muted)}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
+  .title{flex:1 1 220px}
+  .title b{display:block;font-size:18px}
+  .title span{color:var(--muted);font-size:14px}
+  button{font:inherit;color:var(--text);cursor:pointer}
+  .btn{background:var(--panel2);border:1px solid var(--line);padding:9px 14px;border-radius:8px}
+  .btn:hover{border-color:var(--accent)}
+  .btn[aria-pressed="true"]{background:var(--accent);color:#04202c;border-color:var(--accent);font-weight:700}
+  .btn:focus-visible,.cam:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .chip{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:13px;color:var(--muted)}
+  .chip b{color:var(--text);font-weight:600;margin-left:4px}
+  aside h2{font-size:15px;margin:0 0 10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+  .list{display:grid;grid-template-columns:1fr;gap:10px}
+  @media (max-width:980px){.list{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}}
+  .cam{display:grid;grid-template-columns:116px 1fr;gap:10px;align-items:center;text-align:left;background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:8px}
+  @media (max-width:980px){.cam{grid-template-columns:1fr}}
+  .cam:hover{border-color:#2c5873}
+  .cam[aria-pressed="true"]{border-color:var(--accent);background:var(--panel2)}
+  .cam img{width:100%;aspect-ratio:16/9;object-fit:cover;background:#05090d;border-radius:6px;display:block}
+  .cam b{display:block;font-size:14px}
+  .cam small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+  .key{display:inline-block;background:#0b1620;border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:11px;margin-right:6px;color:var(--muted)}
+  .server{display:flex;gap:8px;margin-top:16px}
+  .server input{flex:1;min-width:0;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px}
+  .hint{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.5}
+</style>
+</head>
+<body>
+<header>
+  <h1>First Hand Live <span style="color:var(--muted);font-weight:400">| choose your camera</span></h1>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">Connecting...</span></div>
+</header>
+
+<main>
+  <section>
+    <div class="stage" id="stage">
+      <img id="main" alt="Live camera view">
+      <div class="badges"><span class="pill live" id="livePill" hidden>LIVE</span><span class="pill" id="camPill">-</span></div>
+      <div class="overlay" id="overlay">Waiting for the game. Make sure Unity is in Play Mode and the stream server is running.</div>
+    </div>
+    <div class="bar">
+      <div class="title"><b id="camName">-</b><span id="camDesc"></span></div>
+      <button class="btn" id="dirBtn" aria-pressed="false" title="Follow whichever camera the director picks (D)">Director's choice</button>
+      <button class="btn" id="fsBtn" title="Fullscreen (F)">Fullscreen</button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <aside>
+    <h2>Cameras</h2>
+    <div class="list" id="list"></div>
+    <div class="server">
+      <input id="serverInput" aria-label="Server address" spellcheck="false">
+      <button class="btn" id="connectBtn">Connect</button>
+    </div>
+    <p class="hint">Keys: <span class="key">1</span>-<span class="key">9</span> pick a camera, <span class="key">D</span> director's choice, <span class="key">F</span> fullscreen.</p>
+  </aside>
+</main>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const params = new URLSearchParams(location.search);
+  let server = (params.get('server') || (location.protocol.startsWith('http') ? location.origin : 'http://localhost:8080')).replace(/\/$/, '');
+  let cameras = [], current = null, director = false, connected = false, loadingCams = false;
+  const thumbs = {}, cards = {};
+
+  const DESC = {
+    PLAYER_FPV: "What the player sees",
+    STABILIZED_FPV: "The player's view, kept steady",
+    OTS_WHEEL: "Over the shoulder at the steering wheel",
+    CLOSE_WHEEL: "Close-up of the wheel",
+    TRAILING: "Follows the boat from behind",
+    WIDE_ESTABLISHING: "The whole scene at a glance",
+    LEFT_DIRECTOR: "Side view from the left",
+    RIGHT_DIRECTOR: "Side view from the right",
+    PLAYER: "What the player sees",
+    PLAYER_STABILIZED: "The player's view, kept steady",
+    OTS_HAND: "Over the shoulder, on the active hand",
+    OTS_CLOSE: "Close view for pokes and buttons",
+    CLOSE_BOTH_HANDS: "Both hands and the object",
+    WIDE_FOLLOW: "Wide view behind the player",
+    RAW_FPV: "Raw headset view",
+    CROPPED_FPV: "Headset view, zoomed in",
+    TORSO_ANCHORED: "Steady view of body and hands",
+    OTS_HAND_ALT: "Same shot from the other side",
+    POSE_HANDS: "Both hands during poses",
+    ORBIT_TWO_HAND: "Slow orbit around the action",
+    DYNAMIC_TRACKING: "Follows the active hand",
+    WIDE_SCENE_FIXED: "Fixed view of the whole scene"
+  };
+  const pretty = (n) => n.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  const fmt = (v) => (v !== '' && !isNaN(Number(v))) ? Number(v).toFixed(1) : (v || '-');
+  const url = (p) => server + p;
+
+  async function getJson(path) {
+    const r = await fetch(url(path), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+
+  function setStatus(ok) {
+    connected = ok;
+    $('#dot').className = 'dot ' + (ok ? 'ok' : 'bad');
+    $('#statusText').textContent = ok ? 'Connected' : 'Not connected: ' + server;
+    $('#livePill').hidden = !ok;
+    $('#overlay').style.display = ok ? 'none' : 'flex';
+  }
+
+  function buildList() {
+    const list = $('#list');
+    list.textContent = '';
+    cameras.forEach((c, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'cam';
+      btn.setAttribute('aria-pressed', 'false');
+      const img = document.createElement('img');
+      img.alt = '';
+      const box = document.createElement('div');
+      const b = document.createElement('b');
+      const k = document.createElement('span');
+      k.className = 'key';
+      k.textContent = i < 9 ? String(i + 1) : '';
+      b.append(k, pretty(c.name));
+      const s = document.createElement('small');
+      s.textContent = DESC[c.name] || '';
+      box.append(b, s);
+      btn.append(img, box);
+      btn.addEventListener('click', () => select(c.name));
+      list.append(btn);
+      thumbs[c.name] = img;
+      cards[c.name] = btn;
+    });
+  }
+
+  function highlight() {
+    Object.keys(cards).forEach((n) => cards[n].setAttribute('aria-pressed', String(n === current)));
+    $('#dirBtn').setAttribute('aria-pressed', String(director));
+  }
+
+  function select(name, fromDirector) {
+    if (!fromDirector) director = false;
+    current = name;
+    $('#main').src = url('/stream/' + encodeURIComponent(name) + '?t=' + Date.now());
+    $('#camName').textContent = pretty(name);
+    $('#camDesc').textContent = DESC[name] || '';
+    $('#camPill').textContent = (director ? "Director's choice: " : '') + pretty(name);
+    highlight();
+  }
+
+  async function loadCameras() {
+    if (loadingCams) return;
+    loadingCams = true;
+    try {
+      cameras = await getJson('/cameras');
+      buildList();
+      if (cameras.length) select(cameras[0].name);
+    } catch (e) { /* retried by tick() */ }
+    loadingCams = false;
+  }
+
+  function showTelemetry(t) {
+    const v = t.values || {};
+    const items = [['Player', t.player || '-'], ['Scene', t.scene || '-'], ['Director', t.mode || '-']];
+    ['Event', 'LHandState', 'RHandState', 'Speed', 'Heading', 'Steering'].forEach((k) => {
+      if (v[k] !== undefined) items.push([k, fmt(v[k])]);
+    });
+    const chips = $('#chips');
+    chips.textContent = '';
+    items.forEach(([k, val]) => {
+      const d = document.createElement('div');
+      d.className = 'chip';
+      const b = document.createElement('b');
+      b.textContent = val;
+      d.append(k, b);
+      chips.append(d);
+    });
+  }
+
+  async function tick() {
+    try {
+      const t = await getJson('/telemetry');
+      if (!connected) setStatus(true);
+      showTelemetry(t);
+      if (!cameras.length) loadCameras();
+      if (director && t.activeCamera && t.activeCamera !== current &&
+          cameras.some((c) => c.name === t.activeCamera)) select(t.activeCamera, true);
+    } catch (e) {
+      if (connected || $('#dot').className === 'dot') setStatus(false);
+    }
+  }
+
+  function refreshThumbs() {
+    if (!connected) return;
+    cameras.forEach((c) => {
+      const im = new Image();
+      im.onload = () => { if (thumbs[c.name]) thumbs[c.name].src = im.src; };
+      im.src = url('/snapshot/' + encodeURIComponent(c.name) + '?t=' + Date.now());
+    });
+  }
+
+  function toggleDirector() {
+    director = !director;
+    highlight();
+    $('#camPill').textContent = (director ? "Director's choice: " : '') + (current ? pretty(current) : '-');
+    if (director) tick();
+  }
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if ($('#stage').requestFullscreen) $('#stage').requestFullscreen();
+  }
+
+  function connect() {
+    server = $('#serverInput').value.trim().replace(/\/$/, '') || server;
+    cameras = []; current = null;
+    $('#list').textContent = '';
+    setStatus(false);
+    tick();
+  }
+
+  $('#main').addEventListener('error', () => {
+    if (current) setTimeout(() => { if (connected) select(current, director); }, 2000);
+  });
+  $('#dirBtn').addEventListener('click', toggleDirector);
+  $('#fsBtn').addEventListener('click', toggleFullscreen);
+  $('#connectBtn').addEventListener('click', connect);
+  $('#serverInput').value = server;
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key >= '1' && e.key <= '9') { const c = cameras[Number(e.key) - 1]; if (c) select(c.name); }
+    else if (e.key === 'd' || e.key === 'D') toggleDirector();
+    else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+  });
+
+  setStatus(false);
+  tick();
+  setInterval(tick, 700);
+  setInterval(refreshThumbs, 1500);
+})();
+</script>
+</body>
+</html>
