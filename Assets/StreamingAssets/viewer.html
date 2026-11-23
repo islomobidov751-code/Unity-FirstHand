@@ -47,6 +47,14 @@
   .server{display:flex;gap:8px;margin-top:16px}
   .server input{flex:1;min-width:0;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px}
   .hint{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.5}
+  #freeBar{display:none;margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+  #freeBar h3{margin:0 0 6px;font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+  #freeBar label{display:grid;grid-template-columns:64px 1fr 44px;gap:10px;align-items:center;font-size:13px;margin:4px 0}
+  #freeBar input[type=range]{width:100%}
+  .stage.free img{cursor:grab;touch-action:none}
+  #flyBar{display:none;margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13px;line-height:1.6}
+  #flyBar b{color:var(--accent)}
+  .stage.fly img{cursor:crosshair}
 </style>
 </head>
 <body>
@@ -68,11 +76,25 @@
       <button class="btn" id="fsBtn" title="Fullscreen (F)">Fullscreen</button>
     </div>
     <div class="chips" id="chips"></div>
+    <div id="flyBar">
+      <b>Your own fly camera.</b> Nobody else controls it. Click the picture, then move the mouse to look.<br>
+      <b>W A S D</b> move &middot; <b>Q</b> down &middot; <b>E</b> up &middot; <b>Shift</b> faster &middot; <b>R</b> back to the player &middot; <b>Esc</b> frees the mouse.<br>
+      <span style="color:var(--muted)">The number of personal cameras is limited, so leave when you are done.</span>
+    </div>
+    <div id="freeBar">
+      <h3>Free camera: drag the picture, or use the sliders</h3>
+      <label>Turn<input type="range" id="fcYaw" min="-180" max="180" step="1" value="0"><span id="fcYawV">0</span></label>
+      <label>Height<input type="range" id="fcPitch" min="-10" max="80" step="1" value="20"><span id="fcPitchV">20</span></label>
+      <label>Distance<input type="range" id="fcDist" min="1" max="8" step="0.1" value="3"><span id="fcDistV">3</span></label>
+      <div class="hint" style="margin:6px 0 0">One shared camera: the last person to move it wins.</div>
+    </div>
   </section>
 
   <aside>
     <h2>Cameras</h2>
+    <button class="btn" id="flyBtn" style="width:100%;margin-bottom:10px">Fly my own camera</button>
     <div class="list" id="list"></div>
+    <div id="chatBox" style="margin-top:16px"></div>
     <div class="server">
       <input id="serverInput" aria-label="Server address" spellcheck="false">
       <button class="btn" id="connectBtn">Connect</button>
@@ -163,6 +185,7 @@
   }
 
   function select(name, fromDirector) {
+    if (typeof mySlot !== 'undefined' && mySlot) flyLeave();
     if (!fromDirector) director = false;
     current = name;
     $('#main').src = url('/stream/' + encodeURIComponent(name) + '?t=' + Date.now());
@@ -170,6 +193,9 @@
     $('#camDesc').textContent = DESC[name] || '';
     $('#camPill').textContent = (director ? "Director's choice: " : '') + pretty(name);
     highlight();
+    const isFree = name === 'FREE_ORBIT';
+    $('#freeBar').style.display = isFree ? 'block' : 'none';
+    $('#stage').classList.toggle('free', isFree);
   }
 
   async function loadCameras() {
@@ -243,8 +269,157 @@
     tick();
   }
 
+  // ---- free camera controls (needs the new StreamServer.cs with the /free address) ----
+  const fc = { yaw: 0, pitch: 20, dist: 3 };
+  let fcLast = 0, fcTimer = 0;
+  const fcShow = () => {
+    $('#fcYaw').value = fc.yaw; $('#fcPitch').value = fc.pitch; $('#fcDist').value = fc.dist;
+    $('#fcYawV').textContent = Math.round(fc.yaw); $('#fcPitchV').textContent = Math.round(fc.pitch); $('#fcDistV').textContent = fc.dist.toFixed(1);
+  };
+  const fcSend = () => { fcLast = Date.now(); fetch(url('/free?yaw=' + fc.yaw.toFixed(1) + '&pitch=' + fc.pitch.toFixed(1) + '&dist=' + fc.dist.toFixed(2)), { cache: 'no-store' }).catch(() => {}); };
+  const fcChanged = () => {
+    fc.yaw = Math.max(-180, Math.min(180, fc.yaw)); fc.pitch = Math.max(-10, Math.min(80, fc.pitch)); fc.dist = Math.max(1, Math.min(8, fc.dist));
+    fcShow(); clearTimeout(fcTimer);
+    if (Date.now() - fcLast > 100) fcSend(); else fcTimer = setTimeout(fcSend, 100);
+  };
+  [['#fcYaw', 'yaw'], ['#fcPitch', 'pitch'], ['#fcDist', 'dist']].forEach(([sel, key]) =>
+    $(sel).addEventListener('input', (e) => { fc[key] = Number(e.target.value); fcChanged(); }));
+  let drag = null;
+  $('#main').addEventListener('pointerdown', (e) => { if (current !== 'FREE_ORBIT') return; drag = { x: e.clientX, y: e.clientY }; e.target.setPointerCapture(e.pointerId); e.preventDefault(); });
+  $('#main').addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    fc.yaw += (e.clientX - drag.x) * 0.4;                // drag right = turn right
+    fc.yaw = ((fc.yaw + 180) % 360 + 360) % 360 - 180;   // keep between -180 and 180
+    fc.pitch += (e.clientY - drag.y) * 0.3;              // drag down = camera goes higher
+    drag = { x: e.clientX, y: e.clientY }; fcChanged();
+  });
+  const endDrag = () => { drag = null; };
+  $('#main').addEventListener('pointerup', endDrag); $('#main').addEventListener('pointercancel', endDrag);
+  $('#main').addEventListener('wheel', (e) => { if (current !== 'FREE_ORBIT') return; e.preventDefault(); fc.dist += e.deltaY > 0 ? 0.3 : -0.3; fcChanged(); }, { passive: false });
+  fcShow();
+
+  // ---- personal fly camera: W A S D move, Q/E down/up (or C/Space), Shift fast, mouse looks after a click, R resets ----
+  function installFly(isActive, lockEl, base, getId, onLost) {
+    const fly = { x: 0, y: 0, z: 0, yaw: 0, pitch: 10, fast: 0 }, keys = new Set();
+    let dirty = false, lastSend = 0;
+    const axes = () => {
+      fly.z = (keys.has('w') ? 1 : 0) - (keys.has('s') ? 1 : 0);
+      fly.x = (keys.has('d') ? 1 : 0) - (keys.has('a') ? 1 : 0);
+      fly.y = ((keys.has('e') || keys.has(' ')) ? 1 : 0) - ((keys.has('q') || keys.has('c')) ? 1 : 0);
+      fly.fast = keys.has('shift') ? 1 : 0;
+    };
+    const send = (reset) => {
+      lastSend = Date.now();
+      return fetch(base() + '/fly?id=' + encodeURIComponent(getId()) + '&x=' + fly.x + '&y=' + fly.y + '&z=' + fly.z + '&yaw=' + fly.yaw.toFixed(1) +
+        '&pitch=' + fly.pitch.toFixed(1) + '&fast=' + fly.fast + (reset ? '&reset=1' : ''), { cache: 'no-store' })
+        .then((r) => r.json()).then((j) => { if (!j.ok && onLost) onLost(); }).catch(() => {});
+    };
+    // sends when something changed, and every 2 seconds as a heartbeat so the camera is not taken away
+    setInterval(() => { if (!isActive()) return; if (dirty || keys.size || Date.now() - lastSend > 2000) { dirty = false; send(); } }, 70);
+    const isMove = (k) => (k.length === 1 && 'wasdqec '.indexOf(k) >= 0) || k === 'shift';
+    window.addEventListener('keydown', (e) => {
+      if (!isActive() || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      const k = e.key.toLowerCase();
+      if (isMove(k)) { keys.add(k); axes(); dirty = true; e.preventDefault(); e.stopImmediatePropagation(); }
+      else if (k === 'r') { fly.yaw = 0; fly.pitch = 10; send(true); e.preventDefault(); e.stopImmediatePropagation(); }
+    }, true);
+    window.addEventListener('keyup', (e) => { if (keys.delete(e.key.toLowerCase())) { axes(); dirty = true; } }, true);
+    window.addEventListener('blur', () => { keys.clear(); axes(); dirty = true; });
+    lockEl.addEventListener('click', () => { if (isActive() && document.pointerLockElement !== lockEl && lockEl.requestPointerLock) lockEl.requestPointerLock(); });
+    document.addEventListener('mousemove', (e) => {
+      if (!isActive() || document.pointerLockElement !== lockEl) return;
+      fly.yaw = ((fly.yaw + e.movementX * 0.15 + 180) % 360 + 360) % 360 - 180;
+      fly.pitch = Math.max(-85, Math.min(85, fly.pitch + e.movementY * 0.15));
+      dirty = true;
+    });
+    return { reset() { fly.yaw = 0; fly.pitch = 10; keys.clear(); axes(); } };
+  }
+  const newViewerId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+  let mySlot = null;
+  const viewerId = (() => { try { let v = sessionStorage.getItem('fh_vid'); if (!v) { v = newViewerId(); sessionStorage.setItem('fh_vid', v); } return v; } catch (e) { return newViewerId(); } })();
+  function flyLeave() {
+    if (!mySlot) return;
+    mySlot = null;
+    fetch(url('/fly/leave?id=' + encodeURIComponent(viewerId)), { cache: 'no-store' }).catch(() => {});
+    $('#flyBtn').textContent = 'Fly my own camera'; $('#flyBar').style.display = 'none'; $('#stage').classList.remove('fly');
+  }
+  async function flyJoin() {
+    if (!connected) return;
+    let r;
+    try { r = await getJson('/fly/join?id=' + encodeURIComponent(viewerId)); } catch (e) { alert('Could not reach the game.'); return; }
+    if (r.error) { alert('Personal fly cameras are not set up in Unity yet (add the FlyCameraPool).'); return; }
+    if (!r.slot) { alert('All ' + r.max + ' fly cameras are in use. Try again in a minute.'); return; }
+    mySlot = r.slot; director = false; current = '__MYFLY__';
+    $('#main').src = url('/stream/' + encodeURIComponent(mySlot) + '?t=' + Date.now());
+    $('#camName').textContent = 'My fly camera'; $('#camDesc').textContent = 'Only you see and move this camera';
+    $('#camPill').textContent = 'My fly camera'; $('#flyBtn').textContent = 'Stop my fly camera';
+    $('#flyBar').style.display = 'block'; $('#stage').classList.add('fly'); $('#freeBar').style.display = 'none';
+    highlight();
+  }
+  installFly(() => !!mySlot, $('#main'), () => server, () => viewerId, () => {
+    if (!mySlot) return;
+    flyLeave(); alert('Your fly camera ended because the game stopped hearing from you.'); if (cameras.length) select(cameras[0].name);
+  });
+  // ---- chat with the player (moderators choose what the player sees) ----
+  function installChat(box, base, getId) {
+    const st = document.createElement('style');
+    st.textContent = '.fhc{display:grid;gap:8px;font-size:13px}.fhc h3{margin:0;font-size:13px;color:var(--muted,#9db6c7);text-transform:uppercase;letter-spacing:.6px}' +
+      '.fhc input{width:100%;min-width:0;background:var(--panel,#122433);color:inherit;border:1px solid var(--line,#1d3a50);border-radius:8px;padding:7px 9px;font:inherit}' +
+      '.fhc button{cursor:pointer;color:inherit;background:var(--panel2,#183247);border:1px solid var(--line,#1d3a50);border-radius:8px;padding:7px 12px;font:inherit;white-space:nowrap}' +
+      '.fhc button:disabled{opacity:.5;cursor:default}.fhc .row{display:flex;gap:6px}.fhc .feed{display:grid;gap:4px;max-height:150px;overflow:auto}' +
+      '.fhc .feed b{color:var(--accent,#3fb6d9)}.fhc .feed .mod b{color:#f5b942}.fhc .note{color:var(--muted,#9db6c7);min-height:16px;font-size:12px}';
+    document.head.append(st);
+    box.classList.add('fhc');
+    const mk = (tag, props) => Object.assign(document.createElement(tag), props || {});
+    const feed = mk('div', { className: 'feed' });
+    const name = mk('input', { maxLength: 20, placeholder: 'Your name' });
+    const text = mk('input', { maxLength: 120, placeholder: 'Write a message...' });
+    const send = mk('button', { textContent: 'Send' });
+    const note = mk('div', { className: 'note', textContent: 'Your message goes to the player. Be kind: moderators can remove messages, timeout or ban.' });
+    box.append(mk('h3', { textContent: 'Chat with the player' }), feed, name, mk('div', { className: 'row' }), note);
+    box.children[3].append(text, send);
+    try { name.value = localStorage.getItem('fh_name') || ''; } catch (e) {}
+    [name, text].forEach((i) => ['keydown', 'keyup'].forEach((ev) => i.addEventListener(ev, (e) => { if (ev === 'keydown' && e.key === 'Enter' && i === text) doSend(); e.stopPropagation(); })));
+    const REASON = { wait: 'Please wait a few seconds.', paused: 'Chat is paused right now.', blocked: 'You cannot send messages.', banned: 'You cannot send messages.', filtered: 'That message was not allowed.', empty: 'Write something first.', full: 'Too many messages waiting. Try again soon.', bad: 'Something went wrong.' };
+    let since = 0, wait = 0, tick = 0;
+    function lock(sec) {
+      wait = sec; send.disabled = true; send.textContent = 'Wait ' + sec + 's'; clearInterval(tick);
+      tick = setInterval(() => { wait--; send.textContent = wait > 0 ? 'Wait ' + wait + 's' : 'Send'; if (wait <= 0) { clearInterval(tick); send.disabled = false; } }, 1000);
+    }
+    async function doSend() {
+      const t = text.value.trim(); if (!t || send.disabled) return;
+      try { localStorage.setItem('fh_name', name.value.trim()); } catch (e) {}
+      try {
+        const r = await (await fetch(base() + '/chat/send?id=' + encodeURIComponent(getId()) + '&name=' + encodeURIComponent(name.value.trim() || 'Guest') + '&text=' + encodeURIComponent(t), { cache: 'no-store' })).json();
+        if (r.ok) { text.value = ''; note.textContent = 'Sent to the player.'; lock(Math.ceil(r.cooldown || 5)); }
+        else { note.textContent = r.reason === 'timeout' ? 'You are in timeout for about ' + (r.seconds > 90 ? Math.ceil(r.seconds / 60) + ' minutes.' : r.seconds + ' seconds.') : (REASON[r.reason] || 'Could not send.'); if (r.reason === 'wait') lock(3); }
+      } catch (e) { note.textContent = 'Could not reach the game.'; }
+    }
+    send.onclick = doSend;
+    async function poll() {
+      try {
+        const r = await (await fetch(base() + '/chat/feed?since=' + since, { cache: 'no-store' })).json();
+        r.messages.forEach((m) => {
+          since = Math.max(since, m.seq);
+          const d = mk('div', { className: m.mod ? 'mod' : '' }), b = mk('b', { textContent: m.name }); d.dataset.seq = m.seq;
+          d.append(b, ' ' + m.text); feed.append(d);
+        });
+        (r.removed || []).forEach((q) => { const e = feed.querySelector('[data-seq="' + q + '"]'); if (e) e.remove(); });
+        while (feed.children.length > 30) feed.removeChild(feed.firstChild);
+        if (r.messages.length) feed.scrollTop = feed.scrollHeight;
+        if (r.paused) note.textContent = 'Chat is paused right now.';
+      } catch (e) { /* game not ready */ }
+    }
+    poll(); setInterval(poll, 2000);
+  }
+  installChat($('#chatBox'), () => server, () => viewerId);
+
+  $('#flyBtn').addEventListener('click', () => { if (mySlot) { flyLeave(); if (cameras.length) select(cameras[0].name); } else flyJoin(); });
+  window.addEventListener('pagehide', () => { if (mySlot && navigator.sendBeacon) navigator.sendBeacon(url('/fly/leave?id=' + encodeURIComponent(viewerId))); });
+
   $('#main').addEventListener('error', () => {
-    if (current) setTimeout(() => { if (connected) select(current, director); }, 2000);
+    if (current === '__MYFLY__') setTimeout(() => { if (mySlot) $('#main').src = url('/stream/' + encodeURIComponent(mySlot) + '?t=' + Date.now()); }, 2000);
+    else if (current) setTimeout(() => { if (connected) select(current, director); }, 2000);
   });
   $('#dirBtn').addEventListener('click', toggleDirector);
   $('#fsBtn').addEventListener('click', toggleFullscreen);

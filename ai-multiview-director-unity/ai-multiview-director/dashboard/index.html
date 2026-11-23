@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI MultiView Director</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="bar">
+  <div class="bar-in gutter">
+    <div class="brand"><h1>AI MultiView Director</h1><span class="chip">Director</span></div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button role="tab" data-tab="director" aria-selected="true">Director</button>
+      <button role="tab" data-tab="translation" aria-selected="false">Translation</button>
+    </nav>
+    <div class="right">
+      <div class="conn">
+        <span><i class="dot" id="dBridge"></i>Bridge</span>
+        <span><i class="dot" id="dGame"></i>Game</span>
+        <span><i class="dot" id="dVideo"></i>Video <b id="nVideo">0/4</b></span>
+      </div>
+      <div class="gamebox">
+        <span class="gname" id="gTitle">First Hand</span><span class="gchap" id="gChapter">Waiting for the game</span><span class="clk" id="clk">0:00</span>
+      </div>
+      <span id="matchChip" class="chip">Waiting</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap gutter">
+  <section class="stage" aria-label="Video">
+    <div class="pgm-head">
+      <span class="onair">On air</span><span id="pgmLabel">Cam 4 · Wide orbit</span>
+      <span class="why" id="pgmWhy">AI · Establishing shot</span>
+      <span class="cc" id="ccChip">CC · Korean</span>
+    </div>
+    <div class="program novideo" id="program">
+      <video id="pgmVideo" muted autoplay playsinline></video>
+      <canvas id="pgmCanvas" aria-label="Program output"></canvas>
+      <div class="subs gone" id="subs" aria-live="polite"><div class="o" id="sub-o"></div><div class="s" id="sub-s"></div></div>
+    </div>
+
+    <p class="hint only-director">Click a camera or press <kbd>1</kbd>–<kbd>9</kbd> to cut. <kbd>A</kbd> toggles the AI director. Cameras without video show a telemetry preview (top-down map of the player and hands).</p>
+
+    <section class="panel mic only-translation" aria-label="Commentator microphone">
+      <div class="row"><h2>Commentator mic</h2><small class="chip" id="micSupport">Type or speak</small></div>
+      <div class="miclang">
+        <button class="btn" id="micBtn" type="button">Start microphone</button>
+        <label for="micLang">Speaking</label><select id="micLang"></select>
+        <span id="interim" class="interim"></span>
+      </div>
+      <form class="say" id="say-form">
+        <input id="say" maxlength="300" autocomplete="off" placeholder="Type what the commentator says (e.g. 와, 장갑 완성이에요!)">
+        <button class="btn go" id="say-btn" type="submit">Speak</button>
+      </form>
+      <div class="qlines" id="qlines"></div>
+      <p class="trstat" id="tr-status">Auto commentary turns kills and Core captures into subtitles. Speak or type to talk over it.</p>
+    </section>
+    <section class="lower2 only-translation">
+      <div class="panel"><h2>Caption transcript <small id="t-count">0 lines</small></h2>
+        <div class="tbl"><table id="ttbl"><thead></thead><tbody></tbody></table><div class="empty" id="t-empty">Lines appear here as kills happen and as the commentator talks.</div></div>
+      </div>
+      <div class="panel"><h2>Caption packet <small>bridge → pages</small></h2><pre id="cap-pkt">{ "type": "caption", … }</pre></div>
+    </section>
+  </section>
+
+  <aside class="side" aria-label="Operator rack">
+    <section class="panel only-director">
+      <div class="row">
+        <h2 style="margin:0">AI Director</h2>
+        <button class="switch" id="aiSwitch" role="switch" aria-checked="true" type="button"><span class="trk"></span><span id="aiState">Auto</span></button>
+      </div>
+      <div class="reason" id="reason"><span class="k">Current shot</span><span id="reasonTxt">Establishing shot</span></div>
+    </section>
+    <div class="multiview only-director" id="multiview"></div>
+
+    <section class="panel only-director">
+      <div class="row"><h2 style="margin:0">Session</h2>
+        <select id="gameSel" aria-label="Game profile"><option value="">Follow the game</option></select></div>
+      <ol class="chapters" id="chapters"></ol>
+      <dl class="statgrid" id="stats"></dl>
+    </section>
+
+    <section class="panel only-director">
+      <h2>Player <small id="inputMode">—</small></h2>
+      <div class="hands">
+        <div class="hand" id="handL"><span class="hl">Left hand</span><b>—</b></div>
+        <div class="hand" id="handR"><span class="hl">Right hand</span><b>—</b></div>
+      </div>
+      <p class="note" id="lastAction">Last action: —</p>
+    </section>
+
+    <section class="panel only-director">
+      <h2>Pipeline</h2>
+      <div class="ctl">
+        <button class="switch" id="latAuto" role="switch" aria-checked="true" type="button"><span class="trk"></span><span>Measure video delay automatically</span></button>
+        <label class="slider" for="lat"><span>Manual delay</span><input id="lat" type="range" min="0" max="1000" step="10" value="300"><output id="latOut">300 ms</output></label>
+        <button class="switch" id="syncSwitch" role="switch" aria-checked="true" type="button"><span class="trk"></span><span>Sync telemetry to video</span></button>
+        <p class="note">Video arrives late, telemetry arrives almost instantly. With sync on, events, panels and subtitles are held back by the video delay so they land with the picture.</p>
+      </div>
+      <dl class="metrics">
+        <div><dt>Video latency</dt><dd id="mVid">—</dd></div>
+        <div><dt>Overlay hold</dt><dd id="mHold">—</dd></div>
+        <div><dt>Bridge round trip</dt><dd id="mRtt">—</dd></div>
+        <div><dt>Telemetry rate</dt><dd id="mHz">—</dd></div>
+        <div><dt>Video bitrate</dt><dd id="mBit">—</dd></div>
+        <div><dt>Game frame</dt><dd id="mFrame">—</dd></div>
+      </dl>
+    </section>
+
+    <section class="panel only-director">
+      <h2>Event log</h2>
+      <ol class="log" id="log"></ol>
+    </section>
+
+    <section class="panel only-director">
+      <details class="payload">
+        <summary>Latest telemetry message</summary>
+        <pre id="payload">{}</pre>
+      </details>
+    </section>
+
+    <section class="panel only-translation">
+      <h2>Subtitles</h2>
+      <div class="set">
+        <div class="row"><label for="sub-lang">Program language</label><select id="sub-lang"></select></div>
+        <button class="switch c" id="sw-subs" role="switch" aria-checked="true" type="button"><span class="trk"></span><span>Subtitles on program</span></button>
+        <button class="switch c" id="sw-orig" role="switch" aria-checked="true" type="button"><span class="trk"></span><span>Show original line</span></button>
+        <button class="switch c" id="sw-voice" role="switch" aria-checked="false" type="button"><span class="trk"></span><span>Read subtitles aloud</span></button>
+        <p class="eng" id="tr-engine">Waiting for the bridge…</p>
+      </div>
+    </section>
+    <section class="panel only-translation">
+      <h2>Viewers</h2>
+      <p class="audience" id="audience">No viewer pages connected</p>
+      <div id="vlist"></div>
+      <div class="links" style="margin-top:10px">
+        <span class="note">Viewer page for your audience:</span>
+        <code id="viewerUrl"></code>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<script src="games.js"></script>
+<script src="shared.js"></script>
+<script src="unity.js"></script>
+<script src="extras.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

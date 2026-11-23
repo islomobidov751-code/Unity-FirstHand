@@ -1,0 +1,12 @@
+Unzip MediaMTX into this folder:
+  https://github.com/bluenviron/mediamtx/releases
+  Windows: mediamtx_vX.Y.Z_windows_amd64.zip   Mac (Apple chip): ..._darwin_arm64.tar.gz   Linux: ..._linux_amd64.tar.gz
+
+After unzipping you should see mediamtx.exe (or mediamtx) and mediamtx.yml here.
+Its default settings already match this project:
+  RTSP 8554 (Unity publishes here), WebRTC 8889 (dashboard watches here), publishing allowed, cam1..cam4 created on demand.
+
+Only change for multi-PC demos: open mediamtx.yml, find
+  webrtcAdditionalHosts: []
+and put this PC's network address in it, e.g.
+  webrtcAdditionalHosts: [192.168.0.23]

@@ -838,7 +838,7 @@ MonoBehaviour:
   _speed: 1
   _smoothDamp: -1
   _hapticSource: {fileID: 1675251040737164516}
-  _completeClip: {fileID: 2460798210113038985, guid: 6f0651d892647ec4d900bb824d4393b7, type: 3}
+  _completeClip: {fileID: 0}
   _dragClip: {fileID: 0}
   _whenHaptics:
     m_PersistentCalls:
@@ -4605,7 +4605,7 @@ MonoBehaviour:
   _speed: 1
   _smoothDamp: -1
   _hapticSource: {fileID: 1675251040737164516}
-  _completeClip: {fileID: 2460798210113038985, guid: 6f0651d892647ec4d900bb824d4393b7, type: 3}
+  _completeClip: {fileID: 0}
   _dragClip: {fileID: 0}
   _whenHaptics:
     m_PersistentCalls:
@@ -5425,7 +5425,7 @@ MonoBehaviour:
   _speed: 1
   _smoothDamp: -1
   _hapticSource: {fileID: 1675251040737164516}
-  _completeClip: {fileID: 2460798210113038985, guid: 6f0651d892647ec4d900bb824d4393b7, type: 3}
+  _completeClip: {fileID: 0}
   _dragClip: {fileID: 0}
   _whenHaptics:
     m_PersistentCalls:

@@ -1,5 +1,5 @@
 """
-AI camera director server (works for FirstHand and NorthStar).
+AI camera director server (works for FirstHand)
 
 Run:  python3 director_server.py
 Unity (AIDirectorBridge.cs) sends the logger's latest values as  current=CAM;Name=value;Name=value;...
@@ -8,7 +8,7 @@ This server replies with ONE camera name. Cameras are discovered from the Vis_<c
 Policy:
   - If director_model.pkl exists (made by train_director.py): the learned model picks the camera it rates best
     among the cameras that can currently see the subject.
-  - Otherwise: a rule policy (FirstHand events, or NorthStar steering).
+  - Otherwise: a rule policy (FirstHand events).
 Safety rules (minimum shot time, visibility check) are also enforced again in Unity.
 """
 import os
@@ -25,11 +25,6 @@ FIRSTHAND_PREFS = {
     "INTERACT_POKE": ["OTS_CLOSE", "OTS_HAND"],
     "GRAB_ONE_HAND": ["OTS_HAND", "OTS_HAND_ALT"],
     "IDLE": ["PLAYER_STABILIZED", "TORSO_ANCHORED", "WIDE_FOLLOW"],
-}
-NORTHSTAR_PREFS = {
-    "RIGHT": ["RIGHT_DIRECTOR"],
-    "LEFT": ["LEFT_DIRECTOR"],
-    "STRAIGHT": ["TRAILING", "STABILIZED_FPV", "PLAYER_FPV", "WIDE_ESTABLISHING"],
 }
 
 # --- Variety Rule Globals ---

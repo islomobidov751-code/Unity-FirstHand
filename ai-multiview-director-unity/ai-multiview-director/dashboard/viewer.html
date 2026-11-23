@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live · AI MultiView Director</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Viewer page: the program feed as the audience sees it, with subtitles in the language they pick. */
+:root { color-scheme: dark; --bg: #07090c; --panel: #11161b; --line: #222a32; --fg: #dbe2e8; --dim: #7b8792; --pgm: #ff4336; --cap: #5fd4e6;
+  --f-display: "Barlow Condensed", "Arial Narrow", sans-serif; --f-body: "IBM Plex Sans", system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; --f-mono: "JetBrains Mono", ui-monospace, monospace; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--f-body); }
+button, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--cap); outline-offset: 2px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); max-width: 1280px; margin: 0 auto; }
+.live { background: var(--pgm); color: #fff; font: 700 13px/1 var(--f-display); letter-spacing: .14em; padding: 5px 8px; border-radius: 2px; }
+.title { font: 700 20px/1 var(--f-display); letter-spacing: .04em; text-transform: uppercase; }
+.score { display: flex; font: 700 17px/1 var(--f-display); text-transform: uppercase; letter-spacing: .04em; border-radius: 3px; overflow: hidden; }
+.score span { padding: 6px 9px; display: flex; gap: 7px; align-items: center; }
+.score .a { background: #11161b; color: var(--fg); font: 400 14px/1 var(--f-body); text-transform: none; letter-spacing: 0; } .score .c { background: #0c1014; font-family: var(--f-mono); font-weight: 500; font-size: 14px; }
+.title { color: var(--game, var(--cap)); }
+.score b { color: #fff; }
+.ctl { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 13px; color: var(--dim); }
+select { background: #0c1014; border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; }
+.tog { background: #0c1014; border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+.tog[aria-pressed="true"] { border-color: var(--cap); color: var(--cap); }
+.stage { max-width: 1280px; margin: 0 auto; padding: 0 max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
+.screen { position: relative; aspect-ratio: 16 / 9; max-width: 100%; background: #000; border-radius: 6px; overflow: hidden; }
+.screen video, .screen canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: contain; }
+.screen:not(.novideo) canvas { display: none; }
+.screen.novideo video { visibility: hidden; }
+.subs { position: absolute; left: 7%; right: 7%; bottom: 6%; display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; pointer-events: none; transition: opacity .3s; }
+.subs .o { font: 400 clamp(11px, 1.6vw, 16px)/1.3 var(--f-body); color: rgba(255,255,255,.85); background: rgba(0,0,0,.58); padding: 2px 9px; border-radius: 2px; }
+.subs .s { font: 600 clamp(16px, 2.7vw, 30px)/1.28 var(--f-body); color: #ffe45c; background: rgba(0,0,0,.74); padding: 5px 14px; border-radius: 3px; text-wrap: balance; }
+.subs .s.wait { color: rgba(255,228,92,.62); font-weight: 400; font-style: italic; }
+.subs .o:empty, .subs .s:empty { display: none; }
+.subs.gone { opacity: 0; }
+.status { margin-top: 8px; font: 12px var(--f-mono); color: var(--dim); }
+@media (prefers-reduced-motion: reduce) { .subs { transition: none; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <span class="live">LIVE</span>
+  <span class="title" id="title">AI MultiView Director</span>
+  <div class="score"><span class="a" id="chapter">Starting soon</span><span class="c" id="clk">0:00</span></div>
+  <div class="ctl">
+    <label for="lang">Subtitles</label><select id="lang"></select>
+    <button class="tog" id="orig" aria-pressed="false" type="button">Show original</button>
+    <button class="tog" id="voice" aria-pressed="false" type="button">Read aloud</button>
+  </div>
+</header>
+<main class="stage">
+  <div class="screen novideo" id="screen">
+    <video id="video" muted autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+    <div class="subs gone" id="subs" aria-live="polite"><div class="o" id="sub-o"></div><div class="s" id="sub-s"></div></div>
+  </div>
+  <p class="status" id="status">Connecting…</p>
+</main>
+<script src="/games.js"></script>
+<script src="shared.js"></script>
+<script>
+(() => {
+"use strict";
+const { CONFIG, LANGS, GAMES, WhepPlayer, connectBridge, drawPreview, fitCanvas, captionFor, speakText, fmtElapsed, langOptions } = window.MV;
+const $ = (s) => document.querySelector(s);
+const qs = new URLSearchParams(location.search);
+let lang = qs.get("lang") || (navigator.language || "en").slice(0, 2);
+if (!LANGS[lang]) lang = "en";
+try { const saved = localStorage.getItem("mv-lang"); if (saved && LANGS[saved] && !qs.get("lang")) lang = saved; } catch {}
+let orig = false, voice = false, state = null, cur = null, clearAt = 0, camId = "cam4", player = null, next = null, measured = null, connected = false;
+const held = [];
+const hold = () => (measured != null ? measured : 0);
+
+$("#lang").innerHTML = langOptions(lang);
+$("#lang").addEventListener("change", (e) => { lang = e.target.value; try { localStorage.setItem("mv-lang", lang); } catch {} bridge.send({ type: "langs", langs: [lang] }); render(); });
+for (const [id, set] of [["orig", (v) => (orig = v)], ["voice", (v) => { voice = v; if (!v) try { speechSynthesis.cancel(); } catch {} }]]) {
+  $("#" + id).addEventListener("click", (e) => { const v = e.currentTarget.getAttribute("aria-pressed") !== "true"; e.currentTarget.setAttribute("aria-pressed", String(v)); set(v); render(); });
+}
+
+const bridge = connectBridge("viewer", (m) => {
+  const now = performance.now();
+  if (m.type === "hello") { if (m.program) switchCam(m.program.camId); }
+  else if (m.type === "program") switchCam(m.camId);
+  else if (m.type === "state") held.push({ due: now + hold(), fn: () => { state = m; } });
+  else if (m.type === "caption") {
+    if (m.update && cur && cur.id === m.id) { Object.assign(cur, m); clearAt = Math.max(clearAt, performance.now() + 4000); render(); speak(); return; }
+    if (m.update) return;
+    const show = () => { cur = m; clearAt = performance.now() + (m.kind === "commentator" ? 6500 : m.kind === "dialogue" ? 5500 : 4500); render(); speak(); };
+    if (m.kind !== "commentator") held.push({ due: now + hold(), fn: show }); else show();   // game-made captions wait for the picture
+  }
+}, (ok) => { connected = ok; if (ok) bridge.send({ type: "langs", langs: [lang] }); status(); });
+
+// program video: switch cameras without a black gap (connect the new one, swap when it plays)
+function switchCam(id) {
+  if (!id || (id === camId && player)) return;
+  camId = id;
+  if (next) next.close();
+  const url = `${CONFIG.media}/${id}/whep`;
+  if (!player) { player = new WhepPlayer(url, onPlayer); return; }
+  next = new WhepPlayer(url, (p) => {
+    if (p !== next) return;
+    if (p.status === "live") { player.close(); player = next; next = null; onPlayer(player); }
+    else if (p.status === "offline") { player.close(); player = next; next = null; onPlayer(player); }
+  });
+}
+function onPlayer(p) {
+  if (p !== player) return;
+  const live = p.status === "live" && p.stream;
+  if ($("#video").srcObject !== (live || null)) { $("#video").srcObject = live || null; if (live) $("#video").play().catch(() => {}); }
+  $("#screen").classList.toggle("novideo", !live);
+  status();
+}
+function status() {
+  const v = player && player.status === "live";
+  $("#status").textContent = !connected ? "Connecting to the stream…" : v ? `Live · ${camId}${measured != null ? ` · ${measured} ms behind the game` : ""}` : "Waiting for video. Showing the live map from game data.";
+}
+setInterval(async () => { if (player) { const s = await player.poll(); measured = s.latency; status(); } }, 1000);
+
+function speak() {
+  if (!voice || !cur) return;
+  const c = captionFor(cur, lang);
+  if (c.kind === "ok") speakText(c.text, lang);
+}
+function render() {
+  const vis = !!cur && performance.now() < clearAt;
+  $("#subs").classList.toggle("gone", !vis);
+  if (!vis) return;
+  const c = captionFor(cur, lang);
+  $("#sub-s").textContent = c.text; $("#sub-s").className = "s" + (c.kind === "pending" ? " wait" : "");
+  $("#sub-o").textContent = orig && c.kind === "ok" && cur.source !== lang ? cur.text : "";
+}
+setInterval(() => {
+  const now = performance.now();
+  while (held.length && held[0].due <= now) held.shift().fn();
+  if (cur && now >= clearAt && !$("#subs").classList.contains("gone")) render();
+  if (state) {
+    const prof = GAMES.get(state.game), ses = state.session || {};
+    if ($("#title").textContent !== prof.title) { $("#title").textContent = prof.title; document.title = `Live · ${prof.title}`; document.documentElement.style.setProperty("--game", prof.accent); }
+    $("#chapter").textContent = ses.status === "ended" ? "Session over" : ses.chapter || prof.tagline;
+    $("#clk").textContent = fmtElapsed(ses.elapsed);
+  }
+}, 50);
+function draw() {
+  if ($("#screen").classList.contains("novideo")) { const c = $("#canvas"), dpr = fitCanvas(c); drawPreview(c.getContext("2d"), c.width, c.height, state, { dpr, profile: GAMES.get(state && state.game) }); }
+  setTimeout(() => requestAnimationFrame(draw), 90);
+}
+draw();
+switchCam(camId);
+})();
+</script>
+</body>
+</html>

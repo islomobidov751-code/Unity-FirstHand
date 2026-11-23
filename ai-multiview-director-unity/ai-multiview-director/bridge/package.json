@@ -1,0 +1,16 @@
+{
+  "name": "ai-multiview-director-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WebSocket bridge, caption/translation service and web server for AI MultiView Director",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

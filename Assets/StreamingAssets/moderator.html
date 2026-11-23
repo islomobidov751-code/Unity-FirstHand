@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moderator: First Hand Live</title>
+<style>
+  :root{--bg:#0b1620;--panel:#122433;--panel2:#183247;--line:#1d3a50;--text:#eaf3f8;--muted:#9db6c7;--accent:#3fb6d9;--bad:#e5384a;--ok:#34c38f;--warn:#f5b942;color-scheme:dark}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--line)}
+  h1{font-size:18px;margin:0} .sp{margin-left:auto} .muted{color:var(--muted);font-size:13px}
+  main{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;padding:16px 18px;max-width:1400px;margin:0 auto}
+  @media(max-width:950px){main{grid-template-columns:1fr}}
+  button,input{font:inherit;color:var(--text)} button{cursor:pointer;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 11px;white-space:nowrap}
+  button:hover{border-color:var(--accent)} button.send{background:var(--accent);color:#04202c;border-color:var(--accent);font-weight:700}
+  button.bad{border-color:#6b2a33} button.bad:hover{border-color:var(--bad)} button.on{background:var(--warn);color:#241a00;border-color:var(--warn);font-weight:700}
+  button.good{background:#1d4d3c;border-color:#2c7a5f} button.sm{padding:3px 9px;font-size:12px}
+  input{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+  h2{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:0 0 8px}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px}
+  .held{border-color:var(--warn)} .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+  .top{display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:6px;flex-wrap:wrap}.top b{font-size:14px}
+  .badge{border-radius:999px;padding:1px 9px;font-weight:700;font-size:12px;background:var(--warn);color:#241a00}
+  .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .msg{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--line)}
+  .msg .t{overflow-wrap:anywhere} .msg.removed .t{text-decoration:line-through;opacity:.45} .msg .n{color:var(--accent);font-weight:700} .msg.mod .n{color:var(--warn)}
+  .msg .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .log div{font-size:12px;padding:3px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere} .log .auto{color:var(--warn)}
+  .pen{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px solid var(--line)}
+  .quick{display:flex;flex-wrap:wrap;gap:6px}
+  #login{max-width:420px;margin:12vh auto;padding:0 18px} #err{color:var(--bad);min-height:20px;font-size:14px}
+  #prev{width:100%;aspect-ratio:16/9;object-fit:contain;background:#000;border-radius:8px;display:block}
+</style>
+</head>
+<body>
+<div id="login">
+  <h1>Moderator</h1><p class="muted">Enter the Mod Key you typed on the StreamServer in Unity.</p>
+  <input id="key" type="password" placeholder="Mod Key" autocomplete="off"> <div id="err"></div>
+  <p><button class="send" id="go">Connect</button></p>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <h1>Moderator</h1><span class="muted" id="stat">Connecting...</span><span class="sp"></span>
+    <button id="mode"></button><button id="auto"></button><button id="pause">Pause chat</button>
+    <button class="bad" id="clear" title="Hide the message that is on the player's board and drop the ones waiting">Clear board</button>
+    <button id="out">Log out</button>
+  </header>
+  <main>
+    <section>
+      <div class="box held" id="heldBox" hidden><h2>Held for you: the automatic helper was unsure</h2><div id="held"></div></div>
+      <div class="box"><h2>Messages sent to the player (newest first)</h2><div id="hist"></div><div class="muted" id="empty">Nothing yet.</div></div>
+    </section>
+    <aside>
+      <div class="box"><h2>Write to the player</h2>
+        <input id="own" maxlength="120" placeholder="Your own message...">
+        <div class="row"><button class="send" id="ownBtn">Send to player</button></div>
+        <h2 style="margin-top:14px">Quick messages</h2><div class="quick" id="quick"></div></div>
+      <div class="box"><h2>Penalties</h2><div id="pens"></div><div class="muted" id="nopen">Nobody is banned or in timeout.</div></div>
+      <div class="box"><h2>Automatic helper log</h2><div class="log" id="log"></div><div class="muted" id="nolog">Nothing yet.</div></div>
+      <div class="box"><h2>On air</h2><img id="prev" alt=""><div class="muted" id="cam"></div></div>
+    </aside>
+  </main>
+</div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const QUICK = ['Look up', 'Look left', 'Look right', 'Use both hands', 'Press the green button', 'Nice one!'];
+  let key = '', st = { paused: false, live: true, autoMod: true }, timer = 0, audio = null, busy = false, lastHeld = -1, lastLog = '';
+
+  const call = async (path, params = {}) => {
+    const q = new URLSearchParams({ key, ...params });
+    const r = await fetch('/mod/' + path + '?' + q.toString(), { cache: 'no-store' });
+    if (r.status === 403) throw new Error('bad key');
+    return r.json();
+  };
+  const el = (tag, props, ...kids) => { const e = Object.assign(document.createElement(tag), props || {}); kids.forEach((k) => e.append(k)); return e; };
+  const btn = (t, cls, fn) => el('button', { textContent: t, className: cls || '', onclick: fn });
+  const beep = () => { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); const o = audio.createOscillator(), g = audio.createGain(); o.connect(g); g.connect(audio.destination); g.gain.value = 0.05; o.frequency.value = 660; o.start(); o.stop(audio.currentTime + 0.12); } catch (e) {} };
+  const mins = (s) => s >= 120 ? Math.round(s / 60) + ' min' : s + ' s';
+
+  function render(s) {
+    st = s;
+    $('#mode').textContent = s.live ? 'Mode: LIVE (messages go straight to the player)' : 'Mode: APPROVE FIRST';
+    $('#mode').className = s.live ? '' : 'on';
+    $('#auto').textContent = s.autoMod ? 'Automatic helper: ON' : 'Automatic helper: OFF'; $('#auto').className = s.autoMod ? 'good' : 'on';
+    $('#pause').textContent = s.paused ? 'Resume chat' : 'Pause chat'; $('#pause').className = s.paused ? 'on' : '';
+
+    // held messages (rebuild only changed cards so typing is not lost)
+    $('#heldBox').hidden = !s.held.length;
+    const hl = $('#held'), keep = new Map([...hl.children].map((c) => [c.dataset.id, c]));
+    hl.replaceChildren(...s.held.map((m) => {
+      let c = keep.get(String(m.id));
+      if (!c) c = heldCard(m);
+      c.querySelector('.age').textContent = m.age + ' s ago';
+      const b = c.querySelector('.badge'); b.textContent = m.count > 1 ? 'x' + m.count : ''; b.style.display = m.count > 1 ? '' : 'none';
+      return c;
+    }));
+    if (lastHeld >= 0 && s.held.length > lastHeld) beep();
+    lastHeld = s.held.length;
+
+    // messages that went to the player
+    const hist = $('#hist'); hist.textContent = ''; $('#empty').style.display = s.history.length ? 'none' : 'block';
+    s.history.forEach((m) => {
+      const acts = el('div', { className: 'acts' });
+      if (!m.removed) acts.append(btn('Remove', 'sm', () => act('remove', { id: m.id })));
+      if (!m.mod) {
+        acts.append(btn('Timeout 1 min', 'sm', () => act('timeout', { viewer: m.viewer, minutes: 1 })),
+                    btn('Timeout 10 min', 'sm', () => act('timeout', { viewer: m.viewer, minutes: 10 })),
+                    btn('Ban', 'sm bad', () => { if (confirm('Ban ' + m.name + ' and remove their messages?')) act('ban', { viewer: m.viewer }); }));
+      }
+      const t = el('div', { className: 't' }, el('span', { className: 'n', textContent: m.name + ' ' }), m.text + (m.count > 1 ? '  (x' + m.count + ')' : ''), el('span', { className: 'muted', textContent: '  ' + m.age + ' s' }));
+      hist.append(el('div', { className: 'msg' + (m.removed ? ' removed' : '') + (m.mod ? ' mod' : '') }, t, acts));
+    });
+
+    // penalties
+    const pens = $('#pens'); pens.textContent = ''; $('#nopen').style.display = s.penalties.length ? 'none' : 'block';
+    s.penalties.forEach((p) => pens.append(el('div', { className: 'pen' }, el('span', { textContent: p.name + (p.type === 'ban' ? ' (banned)' : ' (timeout ' + mins(p.seconds) + ' left)') }), btn(p.type === 'ban' ? 'Unban' : 'End timeout', 'sm', () => act('unban', { viewer: p.viewer })))));
+
+    // helper log
+    const lg = $('#log'); lg.textContent = ''; $('#nolog').style.display = s.log.length ? 'none' : 'block';
+    s.log.forEach((l) => lg.append(el('div', { className: /AUTO/.test(l) ? 'auto' : '', textContent: l })));
+    if (s.log[0] && s.log[0] !== lastLog) { if (lastLog && /AUTO|Held/.test(s.log[0])) beep(); lastLog = s.log[0]; }
+  }
+
+  function heldCard(m) {
+    const inp = el('input', { value: m.text, maxLength: 120 });
+    const card = el('div', { className: 'card' });
+    card.dataset.id = m.id;
+    card.append(
+      el('div', { className: 'top' }, el('b', { textContent: m.name }), el('span', { className: 'badge', style: 'background:#6b2a33;color:#fff', textContent: m.flag || 'check' }), el('span', { className: 'badge' }), el('span', { className: 'age muted' })),
+      inp,
+      el('div', { className: 'row' },
+        btn('Release to player', 'send', () => act('release', { id: m.id, text: inp.value })),
+        btn('Reject', '', () => act('reject', { id: m.id })),
+        btn('Timeout 5 min', 'sm', () => act('timeout', { viewer: m.viewer, minutes: 5 })),
+        btn('Ban', 'sm bad', () => { if (confirm('Ban ' + m.name + '?')) act('ban', { viewer: m.viewer }); })));
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') act('release', { id: m.id, text: inp.value }); });
+    return card;
+  }
+
+  async function act(path, params) { try { render(await call(path, params)); } catch (e) { fail(e); } }
+  function fail(e) { $('#stat').textContent = e.message === 'bad key' ? 'Wrong key' : 'Lost connection'; if (e.message === 'bad key') logout(); }
+  async function poll() { if (busy) return; busy = true; try { render(await call('state')); $('#stat').textContent = 'Connected'; } catch (e) { fail(e); } busy = false; }
+  async function preview() {
+    try { const t = await (await fetch('/telemetry', { cache: 'no-store' })).json(); if (t.activeCamera) { $('#cam').textContent = t.activeCamera; $('#prev').src = '/snapshot/' + encodeURIComponent(t.activeCamera) + '?t=' + Date.now(); } } catch (e) {}
+  }
+  async function login() {
+    key = $('#key').value.trim(); $('#err').textContent = '';
+    try { render(await call('state')); } catch (e) { $('#err').textContent = e.message === 'bad key' ? 'Wrong key, or Mod Key is empty in Unity.' : 'Could not reach the game.'; return; }
+    try { sessionStorage.setItem('fh_modkey', key); } catch (e) {}
+    $('#login').hidden = true; $('#app').hidden = false; $('#stat').textContent = 'Connected';
+    clearInterval(timer); timer = setInterval(poll, 1000); setInterval(preview, 2000); preview();
+  }
+  function logout() { clearInterval(timer); try { sessionStorage.removeItem('fh_modkey'); } catch (e) {} $('#app').hidden = true; $('#login').hidden = false; }
+
+  QUICK.forEach((t) => $('#quick').append(btn(t, '', () => act('send', { text: t }))));
+  $('#ownBtn').onclick = () => { const v = $('#own').value.trim(); if (v) { act('send', { text: v }); $('#own').value = ''; } };
+  $('#own').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#ownBtn').click(); });
+  $('#pause').onclick = () => act('pause', { on: st.paused ? '0' : '1' });
+  $('#mode').onclick = () => act('mode', { live: st.live ? '0' : '1' });
+  $('#auto').onclick = () => act('automod', { on: st.autoMod ? '0' : '1' });
+  $('#clear').onclick = () => act('clear');
+  $('#out').onclick = logout; $('#go').onclick = login;
+  $('#key').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
+  try { const k = sessionStorage.getItem('fh_modkey'); if (k) { $('#key').value = k; login(); } } catch (e) {}
+})();
+</script>
+</body>
+</html>
