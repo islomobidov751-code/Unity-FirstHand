@@ -29,6 +29,9 @@
   .pen{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px solid var(--line)}
   .quick{display:flex;flex-wrap:wrap;gap:6px}
   #login{max-width:420px;margin:12vh auto;padding:0 18px} #err{color:var(--bad);min-height:20px;font-size:14px}
+  .chip.shared{padding:2px 10px;opacity:.75;border-style:dashed}
+  .words{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.chip{display:inline-flex;gap:6px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:2px 4px 2px 10px;font-size:13px}.chip button{border:0;background:transparent;padding:0 6px;font-size:15px;line-height:1.2;color:var(--muted)}.chip button:hover{color:var(--bad)}
+  #chk{margin-top:6px;font-size:13px;min-height:18px}.ok{color:var(--ok)}.blocked{color:var(--bad)}.heldc{color:var(--warn)}
   #prev{width:100%;aspect-ratio:16/9;object-fit:contain;background:#000;border-radius:8px;display:block}
 </style>
 </head>
@@ -56,6 +59,19 @@
         <input id="own" maxlength="120" placeholder="Your own message...">
         <div class="row"><button class="send" id="ownBtn">Send to player</button></div>
         <h2 style="margin-top:14px">Quick messages</h2><div class="quick" id="quick"></div></div>
+      <div class="box"><h2>Banned words</h2>
+        <div class="row" style="margin-top:0"><input id="wordIn" maxlength="40" placeholder="Add a word or phrase..." style="flex:1"><button class="send" id="wordAdd">Add</button></div>
+        <div class="muted" style="margin-top:6px">Whole words by default. Start with <b>*</b> to block it inside other words too. Catches letter swaps (b@d), spaced letters (b a d) and stretched letters (baaad).</div>
+        <div class="muted" style="margin-top:6px"><b>Shared</b> words come from <code>banned_words.txt</code> in the project, so they are the same on every computer. Words you add here stay on <b>this</b> computer.</div>
+        <div class="row"><button class="sm" id="wordsReload">Reload shared list</button></div>
+        <div class="words" id="words"></div><div class="muted" id="nowords" style="margin-top:6px">No words yet.</div>
+        <h2 style="margin-top:14px">Test a message</h2>
+        <div class="row" style="margin-top:0"><input id="chkIn" maxlength="120" placeholder="Type a message to test..." style="flex:1"><button id="chkBtn">Test</button></div>
+        <div id="chk"></div></div>
+      <div class="box"><h2>AI check</h2>
+        <div class="muted" id="aiInfo"></div>
+        <div class="row"><button id="aiBtn"></button></div>
+        <div class="muted" style="margin-top:8px">The AI judges the meaning of each message before it can show. Clear insults are blocked, unclear or worrying ones are held for you. The key stays on the Unity computer.</div></div>
       <div class="box"><h2>Penalties</h2><div id="pens"></div><div class="muted" id="nopen">Nobody is banned or in timeout.</div></div>
       <div class="box"><h2>Automatic helper log</h2><div class="log" id="log"></div><div class="muted" id="nolog">Nothing yet.</div></div>
       <div class="box"><h2>On air</h2><img id="prev" alt=""><div class="muted" id="cam"></div></div>
@@ -121,6 +137,14 @@
     // helper log
     const lg = $('#log'); lg.textContent = ''; $('#nolog').style.display = s.log.length ? 'none' : 'block';
     s.log.forEach((l) => lg.append(el('div', { className: /AUTO/.test(l) ? 'auto' : '', textContent: l })));
+    // banned words
+    const wl = $('#words'); wl.textContent = ''; $('#nowords').style.display = ((s.words && s.words.length) || (s.shared && s.shared.length)) ? 'none' : 'block';
+    (s.shared || []).forEach((w) => wl.append(el('span', { className: 'chip shared', title: 'From the shared file in the project. Edit banned_words.txt in Git to change it.' }, w + ' (shared)')));
+    (s.words || []).forEach((w) => wl.append(el('span', { className: 'chip' }, w, el('button', { textContent: '\u00d7', title: 'Remove', onclick: () => act('word_remove', { word: w }) }))));
+    // AI check
+    const ai = s.ai || { on: false, status: 'off', calls: 0, errors: 0, model: '' };
+    $('#aiBtn').textContent = ai.on ? 'AI check: ON' : 'AI check: OFF'; $('#aiBtn').className = ai.on ? 'good' : '';
+    $('#aiInfo').textContent = ai.on ? 'Status: ' + ai.status + ' | checked ' + ai.calls + ' | failed ' + ai.errors + (ai.mock ? ' | MOCK mode (no internet)' : ' | model ' + ai.model) : 'Switched off. Turn it on only after you set the API key on the Unity computer (see the guide).';
     if (s.log[0] && s.log[0] !== lastLog) { if (lastLog && /AUTO|Held/.test(s.log[0])) beep(); lastLog = s.log[0]; }
   }
 
@@ -162,6 +186,19 @@
   $('#mode').onclick = () => act('mode', { live: st.live ? '0' : '1' });
   $('#auto').onclick = () => act('automod', { on: st.autoMod ? '0' : '1' });
   $('#clear').onclick = () => act('clear');
+  $('#wordsReload').onclick = () => act('words_reload');
+  $('#wordAdd').onclick = () => { const v = $('#wordIn').value.trim(); if (v) { act('word_add', { word: v }); $('#wordIn').value = ''; } };
+  $('#wordIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#wordAdd').click(); });
+  $('#aiBtn').onclick = () => act('ai', { on: (st.ai && st.ai.on) ? '0' : '1' });
+  const runCheck = async () => {
+    const t = $('#chkIn').value.trim(); if (!t) return;
+    try {
+      const r = await call('check', { text: t });
+      $('#chk').className = r.result === 'ok' ? 'ok' : r.result === 'blocked' ? 'blocked' : 'heldc';
+      $('#chk').textContent = (r.result === 'ok' ? 'Passes. ' : r.result === 'blocked' ? 'Would be blocked: ' : r.result === 'held' ? 'Would be held: ' : '') + r.reason;
+    } catch (e) { fail(e); }
+  };
+  $('#chkBtn').onclick = runCheck; $('#chkIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') runCheck(); });
   $('#out').onclick = logout; $('#go').onclick = login;
   $('#key').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
   try { const k = sessionStorage.getItem('fh_modkey'); if (k) { $('#key').value = k; login(); } } catch (e) {}

@@ -1376,6 +1376,12 @@ MonoBehaviour:
   strikesForBan: 8
   autoTimeoutMinutes: 2
   boardQueueMax: 5
+  aiCheck: 1
+  aiModel: claude-haiku-5-5
+  aiMaxPerMinute: 60
+  aiFailHold: 0
+  aiSevereStrikes: 2
+  aiMock: 1
 --- !u!114 &283933658
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -23246,7 +23252,7 @@ SceneRoots:
   - {fileID: 1201528588}
   - {fileID: 686861925}
   - {fileID: 1415036624}
+  - {fileID: 283933654}
   - {fileID: 1257097484}
   - {fileID: 562903239}
-  - {fileID: 283933654}
   - {fileID: 1550461949}

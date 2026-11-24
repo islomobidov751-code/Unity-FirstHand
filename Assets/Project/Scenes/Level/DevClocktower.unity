@@ -2158,6 +2158,12 @@ MonoBehaviour:
   strikesForBan: 8
   autoTimeoutMinutes: 2
   boardQueueMax: 5
+  aiCheck: 1
+  aiModel: claude-haiku-5-5
+  aiMaxPerMinute: 60
+  aiFailHold: 0
+  aiSevereStrikes: 2
+  aiMock: 1
 --- !u!114 &495315242
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -1,0 +1,78 @@
+# SHARED banned words for the viewer chat. This file is in the project (and in Git), so every computer that has the project uses it.
+# One word or phrase per line. Lines that start with # are comments.
+#
+#   word          blocked only as a whole word (so "ass" does not block "class")
+#   *word         also blocked inside other words (use for strong words only)
+#   two words     a phrase; spaces, dashes and dots between the words are ignored
+#
+# Letter swaps (b@d), spaced letters (b a d) and stretched letters (baaad) are caught automatically.
+# Plurals are NOT matched by default: add "words" as well as "word", or write *word.
+#
+# To change this list: edit this file, save, commit and push. On the other computer pull, then press Play
+# (or press "Reload shared list" on the moderator page).
+# Words typed on the moderator page are NOT saved here: they stay on that computer only.
+# If your repository is public, anyone can read this list. Use a private repository if that matters.
+#
+# Add your words below:
+# Profanity & Vulgarities
+ass
+asses
+asshole
+assholes
+bastard
+bastards
+*bitch
+bullshit
+cock
+cocks
+crap
+*cunt
+damn
+dick
+dicks
+dickhead
+dickheads
+*fuck
+goddamn
+motherfucker
+motherfuckers
+piss
+pissed
+prick
+pricks
+pussy
+pussies
+shit
+shits
+shitty
+slut
+sluts
+twat
+twats
+whore
+whores
+
+# Severe Slurs & Hate Speech
+*chink
+*dyke
+*fag
+*faggot
+*kike
+*nigger
+*nigga
+*retard
+*spic
+*tranny
+*wetback
+
+# Harassment & Self-Harm Phrases
+kill yourself
+kys
+go die
+neck yourself
+
+# Common Chat Spam & Scam Phrases
+buy followers
+free nitro
+click my link
+dm for promo
