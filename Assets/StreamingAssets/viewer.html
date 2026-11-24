@@ -95,6 +95,7 @@
     <button class="btn" id="flyBtn" style="width:100%;margin-bottom:10px">Fly my own camera</button>
     <div class="list" id="list"></div>
     <div id="chatBox" style="margin-top:16px"></div>
+    <div id="replayBox" style="margin-top:16px"></div>
     <div class="server">
       <input id="serverInput" aria-label="Server address" spellcheck="false">
       <button class="btn" id="connectBtn">Connect</button>
@@ -412,6 +413,81 @@
     }
     poll(); setInterval(poll, 2000);
   }
+  // ---- replays: each viewer plays a saved clip in their own browser, over the live picture ----
+  function installReplay(box, stage, base) {
+    const st = document.createElement('style');
+    st.textContent = '.fhr{display:grid;gap:8px;font-size:13px}.fhr h3{margin:0;font-size:13px;color:var(--muted,#9db6c7);text-transform:uppercase;letter-spacing:.6px}' +
+      '.fhr button{cursor:pointer;color:inherit;background:var(--panel2,#183247);border:1px solid var(--line,#1d3a50);border-radius:8px;padding:6px 11px;font:inherit;white-space:nowrap}' +
+      '.fhr button:hover{border-color:var(--accent,#3fb6d9)}.fhr button:disabled{opacity:.5;cursor:default}' +
+      '.fhr .list{display:grid;gap:6px;max-height:220px;overflow:auto}.fhr .item{display:flex;justify-content:space-between;gap:8px;align-items:center;background:var(--panel,#122433);border:1px solid var(--line,#1d3a50);border-radius:8px;padding:6px 8px}' +
+      '.fhr small{color:var(--muted,#9db6c7)}.fhr .note{color:var(--muted,#9db6c7);font-size:12px;min-height:16px}' +
+      '#rpOver{position:absolute;inset:0;background:#000;display:none;z-index:6}#rpOver canvas{width:100%;height:100%;object-fit:contain;display:block}' +
+      '#rpBar{position:absolute;left:10px;right:10px;bottom:10px;display:flex;gap:10px;align-items:center;font-size:13px;background:rgba(11,22,32,.75);padding:6px 10px;border-radius:8px}' +
+      '#rpBar .track{flex:1;height:4px;background:#2a3a48;border-radius:2px}#rpBar .fill{height:4px;background:var(--accent,#3fb6d9);width:0;border-radius:2px}';
+    document.head.append(st);
+    box.classList.add('fhr');
+    const mk = (tag, props, ...kids) => { const e = Object.assign(document.createElement(tag), props || {}); kids.forEach((k) => e.append(k)); return e; };
+    const save = mk('button', { textContent: 'Save replay now' });
+    const list = mk('div', { className: 'list' });
+    const note = mk('div', { className: 'note' });
+    box.append(mk('h3', { textContent: 'Replays' }), mk('div'), list, note);
+    box.children[1].append(save);
+
+    const cv = mk('canvas', { width: 640, height: 360 });
+    const fill = mk('div', { className: 'fill' }), info = mk('span'), back = mk('button', { textContent: 'Back to live' });
+    const bar = mk('div', { id: 'rpBar' }, back, mk('div', { className: 'track' }, fill), info);
+    const over = mk('div', { id: 'rpOver' }, cv, bar);
+    stage.append(over);
+    let playing = 0;
+    back.onclick = () => { playing++; over.style.display = 'none'; };
+
+    async function play(c) {
+      const my = ++playing;
+      over.style.display = 'block'; info.textContent = 'Loading...'; fill.style.width = '0';
+      const imgs = new Array(c.frames); let loaded = 0;
+      await Promise.all([...Array(c.frames).keys()].map((n) => new Promise((ok) => {
+        const im = new Image(); im.crossOrigin = 'anonymous';
+        im.onload = im.onerror = () => { loaded++; info.textContent = 'Loading ' + Math.round(loaded * 100 / c.frames) + '%'; ok(); };
+        im.src = base() + '/replay/frame/' + c.id + '/' + n; imgs[n] = im;
+      })));
+      if (my !== playing) return;
+      const ctx = cv.getContext('2d'), ms = 1000 / (c.fps || 12);
+      for (let n = 0; n < c.frames && my === playing; n++) {
+        const im = imgs[n];
+        if (im.naturalWidth) { if (cv.width !== im.naturalWidth) { cv.width = im.naturalWidth; cv.height = im.naturalHeight; } ctx.drawImage(im, 0, 0); }
+        fill.style.width = ((n + 1) * 100 / c.frames) + '%'; info.textContent = c.label + '  ' + (n + 1) + '/' + c.frames;
+        await new Promise((r) => setTimeout(r, ms));
+      }
+      if (my === playing) info.textContent = 'Replay finished. Press Back to live.';
+    }
+
+    let warned = false;
+    async function refresh() {
+      try {
+        const r = await fetch(base() + '/replay/list', { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const clips = await r.json();
+        warned = false; note.textContent = '';
+        list.textContent = '';
+        if (!clips.length) list.append(mk('small', { textContent: 'No clips yet. They are saved after a game event, or press Save replay now.' }));
+        clips.forEach((c) => {
+          const b = mk('button', { textContent: 'Play' }); b.onclick = () => play(c);
+          const label = mk('span', { textContent: c.label + ' ' });
+          label.append(mk('small', { textContent: c.scene + ' - ' + c.age + ' s ago' }));
+          list.append(mk('div', { className: 'item' }, label, b));
+        });
+      } catch (e) {
+        if (!warned) { warned = true; list.textContent = ''; note.textContent = 'Replay is not available yet (use the newest StreamServer.cs and keep Record Replay on).'; }
+      }
+    }
+    save.onclick = async () => {
+      save.disabled = true;
+      try { await fetch(base() + '/replay/save?label=' + encodeURIComponent('viewer clip'), { cache: 'no-store' }); note.textContent = 'Saving the last seconds...'; } catch (e) {}
+      setTimeout(() => { save.disabled = false; refresh(); }, 2500);
+    };
+    refresh(); setInterval(refresh, 3000);
+  }
+  installReplay($('#replayBox'), $('#stage'), () => server);
   installChat($('#chatBox'), () => server, () => viewerId);
 
   $('#flyBtn').addEventListener('click', () => { if (mySlot) { flyLeave(); if (cameras.length) select(cameras[0].name); } else flyJoin(); });
