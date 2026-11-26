@@ -46,8 +46,11 @@ namespace NorthStar
         public FlyCameraPool flyPool;   // drag the FlyPool object here
 
         [Header("Viewer chat (live, watched by moderators and an automatic helper)")]
-        [Tooltip("Secret for the moderator page, at least 6 characters. Empty = moderator page is switched off")]
-        public string modKey = "";
+        // The moderator key is NOT a setting on purpose: a saved setting ends up in the scene file and in Git.
+        // It is read when the game starts from the environment variable FIRSTHAND_MOD_KEY, or from the first line of
+        // mod_key.txt in Unity's persistent data folder. With neither, the moderator page is switched off.
+        string modKey = "";
+        public bool ModKeySet { get { return !string.IsNullOrEmpty(modKey) && modKey.Length >= 6; } }
         [Tooltip("ON: messages reach the player at once and moderators remove them afterwards. OFF: moderators must approve each message first")]
         public bool liveChat = true;
         [Tooltip("Automatic helper that checks every message with fixed rules (not a language model)")]
@@ -126,13 +129,39 @@ namespace NorthStar
 
         double Now { get { return clock.Elapsed.TotalSeconds; } }
 
+        void LoadModKey()   // main thread, in Start
+        {
+            string k = Environment.GetEnvironmentVariable("FIRSTHAND_MOD_KEY");
+            string source = "the environment variable FIRSTHAND_MOD_KEY";
+            string path = Path.Combine(Application.persistentDataPath, "mod_key.txt");
+            try
+            {
+                if (string.IsNullOrWhiteSpace(k) && File.Exists(path))
+                {
+                    string[] lines = File.ReadAllLines(path);
+                    if (lines.Length > 0) k = lines[0];
+                    source = path;
+                }
+            }
+            catch { }
+            k = (k ?? "").Trim();
+            if (k.Length >= 6) { modKey = k; Debug.Log("StreamServer: the moderator page is ON (the key was read from " + source + ")."); }
+            else { modKey = ""; Debug.LogWarning("StreamServer: the moderator page is OFF. Set FIRSTHAND_MOD_KEY (6 or more characters), or put the key on the first line of " + path + ". Never put the key in Git."); }
+        }
+
         void Start()
         {
             clock.Start();
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("VRAIDETECTOR_PIPE")))
+            {
+                // started by the VR AI Director app: no web server at all, so no viewer chat, replay, fly cameras or moderator page can reach the player
+                Debug.Log("StreamServer: started by VR AI Director, so the web server is switched off.");
+                return;
+            }
             viewerPath = Path.Combine(Application.streamingAssetsPath, "viewer.html");
             moderatorPath = Path.Combine(Application.streamingAssetsPath, "moderator.html");
             LoadWords();
-            if (string.IsNullOrEmpty(modKey) || modKey.Length < 6) Debug.LogWarning("StreamServer: set Mod Key (6 or more characters) to switch on the moderator page.");
+            LoadModKey();
             if (dashboard == null) { Debug.LogWarning("StreamServer: assign the dashboard"); return; }
 
             var sb = new StringBuilder("[");
